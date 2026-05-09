@@ -3,8 +3,6 @@ use std::option::Option;
 
 const INDS: i32 = 2;
 const VALUES: i32 = 6;
-const TT_INT: &'static str = "INT";
-const TT_FLOAT: &'static str = "FLOAT";
 const TT_STRING: &'static str = "STRING";
 const TT_KEYWORD: &'static str = "KEYWORD";
 const TT_IDENTIFIER: &'static str = "IDENTIFIER";
@@ -118,20 +116,7 @@ impl Lexer {
                 value: value.to_string(),
             });
         }
-
         return tokens;
-    }
-
-    fn make_string(&self) {
-
-    }
-
-    fn make_keyword(&self) {
-
-    }
-
-    fn make_identifier(&self) {
-
     }
 }
 
