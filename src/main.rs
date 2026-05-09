@@ -1,5 +1,7 @@
 use std::io::{stdin, stdout, Write};
 use std::option::Option;
+use std::env;
+use std::fs;
 
 const INDS: i32 = 2;
 const VALUES: i32 = 6;
@@ -7,6 +9,7 @@ const TT_STRING: &'static str = "STRING";
 const TT_KEYWORD: &'static str = "KEYWORD";
 const TT_IDENTIFIER: &'static str = "IDENTIFIER";
 const TT_ERROR: &'static str = "ERROR";
+const TT_NEWLINE: &'static str = "NEWLINE";
 
 const KEYWORDS: &'static [&'static str] = &[
     "print",
@@ -36,7 +39,7 @@ impl Position {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Token<'a> {
     ttype: &'a str,
     value: String,
@@ -83,64 +86,160 @@ impl Lexer {
             let mut j: i32 = 0;
             let mut ind: String = String::new();
             let mut tmpvalue: String = String::new();
-            while i != INDS {
-                if let Option::Some(value) = self.current_char {
-                    ind.push(value);
-                    self.advance();
-                }
-                i += 1;
-            } 
-            
-            while j != VALUES {
-                if let Option::Some(value) = self.current_char {
-                    tmpvalue.push(value);
-                    if self.pos.idx + 1 < self.text.len() {
+
+            if let Some('\n') = self.current_char {
+                tokens.push(Token {
+                    ttype: TT_NEWLINE,
+                    value: 0.to_string(),
+                });
+                self.advance();
+            }
+            else {
+                while i != INDS {
+                    if let Option::Some(value) = self.current_char {
+                        ind.push(value);
                         self.advance();
                     }
+                    i += 1;
+                } 
+                
+                while j != VALUES {
+                    if let Option::Some(value) = self.current_char {
+                        tmpvalue.push(value);
+                        if self.pos.idx + 1 < self.text.len() {
+                            self.advance();
+                        }
+                    }
+                    j += 1;
                 }
-                j += 1;
+
+                let tmpind = from_bin(ind.clone());
+
+                let ttype: &str = match tmpind {
+                    1 => TT_IDENTIFIER,
+                    2 => TT_STRING,
+                    3 => TT_KEYWORD,
+                    _ => TT_ERROR
+                };
+
+                let value = from_bin(tmpvalue.clone());
+                tokens.push(Token {
+                    ttype,
+                    value: value.to_string(),
+                });
             }
-
-            let mut tmpind = from_bin(ind.clone());
-
-            let ttype: &str = match tmpind {
-                1 => TT_IDENTIFIER,
-                2 => TT_STRING,
-                3 => TT_KEYWORD,
-                _ => TT_ERROR
-            };
-
-            let mut value = from_bin(tmpvalue.clone());
-            tokens.push(Token {
-                ttype,
-                value: value.to_string(),
-            });
         }
+        println!("{:#?}", tokens);
         return tokens;
+    }
+}
+
+enum Node {
+    FuncNode,
+    StringNode,
+    VarAssignNode,
+    CallNode,
+}
+
+struct ParseResult {
+    error: Option<String>,
+    node: Option<Node>,
+    advance_count: i32,
+    to_reverse_count: i32,
+}
+
+impl ParseResult {
+    fn new() -> Self {
+        Self{
+            error: Option::<String>::None,
+            node: Option::<Node>::None,
+            advance_count: 0,
+            to_reverse_count: 0,
+        }
+    }
+
+    fn register_advancement(&mut self) {
+        self.advance_count += 1;
+    }
+
+    fn register(&mut self, res: ParseResult) -> Option<Node> {
+        self.advance_count += res.advance_count;
+        if res.error != None { self.error = res.error }
+        return res.node
+    }
+}
+
+struct Parser<'a> {
+    tokens: Vec<Token<'a>>,
+    tok_idx: usize,
+    current_tok: Token<'a>,
+}
+
+impl<'a> Parser<'a> {
+    fn new(tokens: Vec<Token<'a>>) -> Self {
+        Self {
+            tokens: tokens.clone(),
+            tok_idx: 0,
+            current_tok: tokens[0].clone(),
+        }
+    }
+
+    fn advance(&mut self) -> Token {
+        self.tok_idx += 1;
+        self.update_current_tok();
+        return self.current_tok.clone();
+    }
+
+    fn update_current_tok(&mut self) {
+        if self.tok_idx >= 0 && self.tok_idx < self.tokens.len() {
+            self.current_tok = self.tokens[self.tok_idx].clone();
+        }
+    }
+
+    fn parse(&self) -> ParseResult {
+        let mut res = ParseResult::new();
+        return res
     }
 }
 
 fn main() {
     let mut inp: String = String::new();
-    loop {
-        print!("$ ");
-        let _ = stdout().flush();
-        stdin().read_line(&mut inp).expect("Invalid input");
-        if let Some('\n')=inp.chars().next_back() {
-            inp.pop();
-        } 
-        if let Some('\r')=inp.chars().next_back() {
-            inp.pop();
-        }
-        if inp == String::from("exit") {
-            break;
-        }
-        else {
-            let mut lexer = Lexer::new(String::from("<stdin>"), inp.clone());
-            lexer.make_tokens();
-        }
+    let read_from_file: i32 = 1;
 
-        inp = String::new()
+    if read_from_file == 0 {
+        loop {
+            print!("$ ");
+            let _ = stdout().flush();
+            stdin().read_line(&mut inp).expect("Invalid input");
+            if let Some('\n')=inp.chars().next_back() {
+                inp.pop();
+            } 
+            if let Some('\r')=inp.chars().next_back() {
+                inp.pop();
+            }
+            if inp == String::from("exit") {
+                break;
+            }
+            else {
+                let mut lexer = Lexer::new(String::from("<stdin>"), inp.clone());
+                let tokens: Vec<Token> = lexer.make_tokens();
+                let mut parser = Parser::new(tokens);
+                let ast = parser.parse();
+            }
+
+            inp = String::new();
+        }
+    }
+    else {
+        let args: Vec<String> = env::args().collect();
+        let file_path = &args[1];
+        println!("{}", file_path);
+        let file_contents = fs::read_to_string(file_path)
+            .expect("file was not read!");
+        let mut lexer = Lexer::new(String::from("<stdin>"), file_contents);
+        let tokens: Vec<Token> = lexer.make_tokens();
+        let mut parser = Parser::new(tokens);
+        let ast: ParseResult = parser.parse();
     }
 }
 
